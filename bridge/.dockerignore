@@ -1,0 +1,11 @@
+# 构建上下文是 bridge/，忽略本地开发产物，避免打进镜像
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+.idea/
+*.log
+*.pcap
+.DS_Store
+Thumbs.db

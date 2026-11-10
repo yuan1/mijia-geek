@@ -2,7 +2,7 @@ name: Mijia Geek Bridge
 version: "2.3.0"
 slug: mijia_geek_bridge
 description: 米家中枢网关极客版桥接 —— 长连接网关，提供 REST API 和 Web 配置界面
-url: https://github.com/yuan1/mijia-geek
+url: https://github.com/yuan1/mijia-geek/tree/main/bridge
 arch:
   - amd64
   - aarch64
@@ -15,6 +15,10 @@ panel_icon: mdi:hub
 panel_title: 米家极客版
 # 控制网关属于管理操作：仅管理员可通过 ingress 进入
 panel_admin: true
+# 供 HA 自定义集成发现 Bridge 内部地址：
+#   http(s)://<hostname>:<ingress_port>
+# hostname 为 Supervisor 分配给本 Add-on 的容器名（slug 中的 _ 会变成 -）
+hostname: mijia-geek-bridge
 options:
   gateway_url: "http://192.168.1.100"
   gateway_web_url: ""
@@ -32,10 +36,12 @@ schema:
   mcp_allow_write: bool
   mcp_allow_passcode: bool
 # 说明：
-#   · 登录码一次性，不能持久化，因此不再作为 addon 配置项保存
-#   · 不映射宿主机端口；HA 自定义集成可使用内部地址
-#     http://local-mijia-geek-bridge:8099（Supervisor 为 local addon 加 local- 前缀）
-#   · 如果内部主机名不可达，可临时取消下面的端口映射（注意设置 API_TOKEN）：
+#   · 登录码一次性，不能持久化，因此不作为 addon 配置项保存
+#   · 默认不映射宿主机端口；HA 自定义集成使用内部地址
+#     http://mijia-geek-bridge:8099
+#   · mcp_http_port 设为 0 表示不启动 MCP HTTP 服务；
+#     非 0 时强制要求设置 api_token（见 run.sh 的启动校验）
+#   · 如果内部主机名不可达，可临时取消下面的端口映射（务必设置 api_token）：
 # ports:
 #   8099/tcp: 8099
 #   · 独立 Docker 部署请设置 API_TOKEN 环境变量

@@ -15,8 +15,8 @@
 | 架构 | amd64 |
 | 中枢网关 | `192.168.1.100` |
 | 网关极客版 Web | `http://192.168.1.100:8086/` |
-| Bridge 版本 | **2.2.0** |
-| 部署方式 | **Supervisor Addon（推荐）** |
+| Bridge 版本 | **2.3.0** |
+| 部署方式 | **Supervisor Addon（仓库方式，推荐）** |
 
 ---
 
@@ -32,6 +32,66 @@
 ---
 
 ## 三、方式 A：Supervisor Addon（推荐）
+
+> **两种子方式，选其一：**
+>
+> | | A-1 仓库方式（推荐） | A-2 本地 addon |
+> |---|---|---|
+> | 更新 | 商店里点「更新」即可 | 每次手动拷源码 + 重建 |
+> | 前提 | 仓库已推送到 GitHub | 能访问宿主机 `/mnt/data` |
+> | 适合 | 长期使用、多设备 | 开发调试 |
+>
+> 下面先讲 A-1，A-2 见 3.2。
+
+### 3.0 方式 A-1：把仓库添加为「附加组件仓库」⭐
+
+本仓库根目录含 `repository.yaml`，可直接被 HA 识别为 Add-on 仓库。
+
+**一次性操作：**
+
+1. HA → **设置 → 加载项 → 附加组件商店**
+2. 右上角 **⋮ → 仓库**
+3. 填入仓库地址并添加：
+
+   ```
+   https://github.com/yuan1/mijia-geek
+   ```
+
+4. 点「添加」后关闭，回到商店，**刷新页面**
+5. 在列表中找到 **Mijia Geek Bridge**，点进去 → **安装**
+
+**之后如何更新：**
+
+```
+设置 → 加载项 → Mijia Geek Bridge → 有新版本时会出现「更新」按钮 → 点更新
+```
+
+> HA 通过 `bridge/config.yaml` 的 `version` 字段判断是否有更新。
+> 所以**每次发布必须递增 version**（`x.y.z` 字符串，不是数字），
+> 否则商店不会提示更新。
+
+**发布新版本的完整流程：**
+
+```bash
+# 1. 改版本号（两处必须一致，CI 会检查）
+#    bridge/config.yaml          version: "2.3.1"
+#    ha_integration/mijia_geek/manifest.json   "version": "2.3.1"
+
+# 2. 本地校验元数据
+python scripts/check_addon.py
+
+# 3. 提交并推送
+git add -A && git commit -m "chore: bump to 2.3.1" && git push
+
+# 4. HA 里：加载项商店 → 右上角 ⋮ → 检查更新 → 点「更新」
+```
+
+> 首次安装需要 Supervisor 拉取仓库并**编译镜像**（python 3.12 + 依赖），
+> 视网络与机器性能约 3–10 分钟。日志可在 Add-on 页面「日志」标签查看。
+
+### 3.1 前置：确认 local addon 是否被支持（仅 A-2 方式需要）
+
+
 
 ### 3.1 前置：确认 local addon 是否被支持
 

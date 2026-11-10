@@ -8,9 +8,30 @@
 
 ---
 
+## 安装（HA Add-on 仓库方式）
+
+本仓库根目录含 `repository.yaml`，可直接作为 HA 的**附加组件仓库**使用：
+
+1. HA → **设置 → 加载项 → 附加组件商店**
+2. 右上角 **⋮ → 仓库**
+3. 填入 `https://github.com/yuan1/mijia-geek` → 添加
+4. 回到商店刷新，找到 **Mijia Geek Bridge** → 安装
+
+之后有新版本时，Add-on 页面会出现「更新」按钮，点一下即可。
+详细步骤见 [DEPLOY.md](./DEPLOY.md) 第 3.0 节。
+
+其他部署方式（手动 Docker、本地 addon）同样见 DEPLOY.md。
+
+---
+
 ## 目录结构
 
 ```
+repository.yaml                 # HA 附加组件仓库清单（根目录，必须有）
+scripts/
+└── check_addon.py              # addon 元数据校验（CI 也会跑）
+.github/workflows/ci.yml        # 测试 + 元数据校验
+
 bridge/                         # 独立 Docker / Addon 服务
 ├── config.yaml                 # HA Addon 配置
 ├── Dockerfile
