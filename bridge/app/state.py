@@ -28,6 +28,7 @@ class AppState:
         self.gateway_url = GATEWAY_URL
         self.passcode = ""
         self.devices: dict = {}
+        self._specs: dict[str, dict] = {}
         self.rules: list = []
         self.last_log: str = ""
         self.connected = False
@@ -39,6 +40,30 @@ class AppState:
         self.subscribers: set[asyncio.Queue] = set()
         self.poll_task: asyncio.Task | None = None
         self.lock = asyncio.Lock()
+
+    # ---------- 设备能力 ----------
+    @property
+    def specs(self) -> dict[str, dict]:
+        """设备能力索引 ``{did: {urn, spec}}``，供规则写入前校验。
+
+        网关设备列表只给出 urn，不含 siid/piid/aiid 能力表；
+        ``spec`` 为空时表示「能力未知」，校验会跳过 siid/piid 检查。
+        """
+        missing = [did for did, device in (self.devices or {}).items()
+                   if did not in self._specs or self._specs[did].get("urn") != device.get("urn")]
+        if missing:
+            self._specs = {
+                did: {**(self._specs.get(did) or {}),
+                      "urn": device.get("urn"),
+                      "spec": (self._specs.get(did) or {}).get("spec") or {}}
+                for did, device in (self.devices or {}).items()
+            }
+        return self._specs
+
+    def set_spec(self, did: str, spec: dict) -> None:
+        """注册某个设备的 miot-spec 能力表，启用更严格的 siid/piid 校验。"""
+        entry = self._specs.setdefault(did, {})
+        entry["spec"] = spec
 
     # ---------- 持久化 ----------
     def save(self) -> None:

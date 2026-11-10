@@ -414,84 +414,191 @@ async for raw in ws:
 
 ## 九、规则节点类型
 
-规则由节点组成，通过 `setGraph` 提交。
+> **本节为实测校正版（2026-11-10）。**
+> 早期文档中的节点示例（`outputs` 用数组、`dtype: "bool"`、`operator: "eq"`、
+> `params`、`seconds`）**与网关实际要求不符**，照抄提交会被网关以
+> `-10002: Invalid node parameter / Invalid connection` 直接拒绝。
+> 以下结构是通过逆向官方极客版编辑器前端（`http://<网关>/` 里的
+> `checkWebRule` / `checkWebNode`）并在真机 `setGraph` 写入成功验证过的。
 
-### deviceInput（设备触发）
+规则由节点组成，通过 `setGraph` 提交。**一份完整可用的最小规则**：
 
 ```json
 {
-  "id": "n1",
-  "type": "deviceInput",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "deviceInput",
+      "cfg": {
+        "urn": "urn:miot-spec-v2:device:occupancy-sensor:0000A0BF:linp-hb01:3:0000C824",
+        "version": 0,
+        "pos": {"x": 80, "y": 120, "width": 250, "height": 110}
+      },
+      "props": {
+        "did": "1000000001",
+        "siid": 2,
+        "piid": 1,
+        "dtype": "int",
+        "operator": "=",
+        "v1": 1,
+        "preload": false
+      },
+      "inputs": {},
+      "outputs": {"output": ["n2.trigger"]}
+    },
+    {
+      "id": "n2",
+      "type": "deviceOutput",
+      "cfg": {
+        "urn": "urn:miot-spec-v2:device:light:0000A001:seomsh-wy0a01:1:0000C802",
+        "version": 0,
+        "pos": {"x": 430, "y": 120, "width": 250, "height": 110}
+      },
+      "props": {"did": "1000000002", "siid": 2, "piid": 1, "value": true},
+      "inputs": {"trigger": null},
+      "outputs": {"output": []}
+    }
+  ],
   "cfg": {
-    "urn": "urn:miot-spec-v2:device:sensor:0000A077:linp-hb01:1",
-    "pos": {"x": 100, "y": 100, "width": 200, "height": 100}
-  },
-  "props": {
-    "did": "1000000001",
-    "siid": 2,
-    "piid": 1,
-    "dtype": "bool",
-    "operator": "eq",
-    "value": true
-  },
-  "inputs": {},
-  "outputs": {"output": [["n2", "trigger"]]}
-}
-```
-
-**操作符**：`eq` / `ne` / `gt` / `lt` / `ge` / `le`
-
-**触发条件**：
-- 有 `piid`：属性值满足条件时触发
-- 有 `eiid`：事件发生时触发
-
-### deviceOutput（执行操作）
-
-**通过 aiid 调用动作**：
-```json
-{
-  "type": "deviceOutput",
-  "props": {
-    "did": "1000000002",
-    "siid": 2,
-    "aiid": 1,
-    "params": [true]
+    "id": "rule_123456",
+    "enable": false,
+    "uiType": "graph",
+    "userData": {
+      "name": "示例规则",
+      "lastUpdateTime": 1710000000000,
+      "transform": {"x": 0, "y": 0, "scale": 1, "rotate": 0}
+    }
   }
 }
 ```
 
-**通过 piid 设置属性**：
+### 九.1 六条硬性要求（踩过的坑）
+
+| 字段 | ❌ 不能这样写 | ✅ 必须这样写 |
+|---|---|---|
+| 连线 | `[["n2", "trigger"]]` | `["n2.trigger"]` —— **`"目标节点.输入端口"` 字符串** |
+| 节点 `cfg` | `{urn, pos}` | 必须含 **`cfg.version`**（整数迁移计数，新节点写 `0`） |
+| 节点 `inputs` | `{}` | 必须**声明端口**：`deviceOutput → {"trigger": null}`、`delay → {"input": null}` |
+| `props.dtype` | `uint8` / `bool` / `float32` | **`int` / `float` / `boolean` / `string`** |
+| `props.operator` | `eq` / `ne` / `gt` | **`=` `!=` `>` `<` `>=` `<=` `between` `include`** |
+| 触发条件值 | `value: 1` | **`v1: 1`**（另需 `preload`） |
+| 执行动作参数 | `params: [true]` | **`value: true`**（piid 分支） |
+| 延时 | `{seconds: 120}` | **`props.timeout: 120000`**（毫秒）+ `cfg.unit/value` |
+
+> Bridge 在 `PUT /api/rule/{id}` 与 MCP `save_rule` 之前都会调用
+> `bridge/app/schema.py` 自动把上表「❌」列归一化成「✅」列，并把无法自动
+> 修正的问题以 `400` + 具体原因返回，不必再靠试错。
+
+### 九.2 deviceInput（设备触发）
+
+**属性触发**（`piid` 分支）：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `did` | string | 设备 ID |
+| `siid` | int | 服务 ID |
+| `piid` | int | 属性 ID |
+| `dtype` | `int`/`float`/`boolean`/`string` | **不是 miot 的 `uint8`** |
+| `operator` | `=`/`!=`/`>`/`<`/`>=`/`<=`/`between`/`include` | 见下方按 dtype 的限制 |
+| `v1` | 依 dtype | **触发值用 `v1`，不是 `value`** |
+| `v2` | 依 dtype | 仅 `between` 需要 |
+| `preload` | bool | 是否预载当前状态；`false` = 仅状态**变化**时触发 |
+
+按 `dtype` 的 operator 限制（网关强校验）：
+
+- `int`：`>=` `<=` `=` `!=` `>` `<` `between` `include`；`v1` 必须是整数
+- `float`：只允许 `>` `<` `between`；`v1` 必须是数字
+- `boolean` / `string`：只允许 `=`
+
+**事件触发**（`eiid` 分支）：`{"did","siid","eiid","arguments":[...]}`，
+`arguments` 每项为 `{"piid": N, "value": ...}`。
+
+**输出端口**：只有 `output` 一个，值为 `["目标.端口"]`。
+
+### 九.3 deviceOutput（执行操作）
+
+执行动作（`aiid` 分支）：
+
 ```json
 {
+  "id": "n2",
   "type": "deviceOutput",
-  "props": {
-    "did": "1000000002",
-    "siid": 2,
-    "piid": 1,
-    "dtype": "int",
-    "params": [50]
-  }
+  "cfg": {"urn": "...", "version": 0, "pos": {...}},
+  "props": {"did": "1000000002", "siid": 2, "aiid": 1, "ins": []},
+  "inputs": {"trigger": null},
+  "outputs": {"output": []}
 }
 ```
 
-### 其他节点类型
+设置属性（`piid` 分支）——注意是 **`value`**，不是 `params`：
 
-| 类型 | 用途 |
-|---|---|
-| `deviceGet` | 查询设备状态 |
-| `condition` | 条件判断 |
-| `logicAnd` / `logicOr` / `logicNot` | 逻辑运算 |
-| `timeRange` | 时间段 |
-| `delay` / `timer` | 延时/定时 |
-| `loop` | 循环 |
-| `counter` | 计数器 |
-| `modeSwitch` | 模式切换 |
-| `eventSequence` | 事件序列 |
-| `signalOr` | 信号或 |
-| `statusLast` | 状态持续 |
-| `onLoad` | 启动时 |
+```json
+{
+  "props": {"did": "1000000002", "siid": 2, "piid": 1, "value": true}
+}
+```
 
-### 规则 cfg 结构
+若要写入变量而非字面量，则用 `scope` + `id`（此时还需 `dtype`，`number` 类型
+还要 `min`/`max`/`step`）。
+
+### 九.4 delay（延时）
+
+```json
+{
+  "id": "n4",
+  "type": "delay",
+  "cfg": {"urn": "", "version": 0, "unit": "s", "value": 120, "pos": {...}},
+  "props": {"timeout": 120000},
+  "inputs": {"input": null},
+  "outputs": {"output": ["n5.trigger"]}
+}
+```
+
+- `props.timeout` 单位是**毫秒**，必须是整数
+- `cfg.unit` ∈ `ms` / `s` / `min` / `hour`（仅用于编辑器显示）
+- **输入端口是 `input`，不是 `trigger`** —— 这是最容易写错的一处
+
+### 九.5 各节点类型的输入端口
+
+连线右侧的端口名必须与目标节点 `inputs` 里声明的键一致：
+
+| 节点类型 | 输入端口 | 输出端口 |
+|---|---|---|
+| `deviceInput` / `deviceInputSetVar` / `onLoad` / `alarmClock` | 无 | `output` |
+| `deviceOutput` | `trigger` | `output` |
+| `deviceGet` / `deviceGetSetVar` | `input` | `output` |
+| `delay` | `input` | `output` |
+| `condition` | `trigger`, `condition` | `met`, `unmet` |
+| `logicAnd` / `logicOr` | `input1`, `input2` | `output` |
+| `logicNot` / `counter` | `input` | `output` |
+| `statusLast` | `trigger` | `output` |
+| `eventSequence` | `input1`, `input2` | `output` |
+| `varGet` / `varSetNumber` / `varSetString` | `input` | `output` |
+
+### 九.6 节点 ID 限制
+
+网关只允许 **字母、数字和 `|`**，不能出现 `_`、`-` 等字符：
+
+```json
+{"id": "n1"}        // ✅
+{"id": "node|1"}    // ✅
+{"id": "node_1"}    // ❌ Invalid charactor in id
+{"id": "node-1"}    // ❌
+```
+
+### 九.7 全部支持的节点类型
+
+以官方前端 `Pr` 表为准（共 25 种）：
+
+`alarmClock`、`condition`、`counter`、`delay`、`deviceGet`、`deviceInput`、
+`deviceInputSetVar`、`deviceOutput`、`deviceGetSetVar`、`eventSequence`、
+`logicAnd`、`logicNot`、`logicOr`、`loop`、`modeSwitch`、`nop`、`onLoad`、
+`onlyNTimes`、`register`、`signalOr`、`statusLast`、`timeRange`、`varChange`、
+`varGet`、`varSetNumber`、`varSetString`
+
+> 注意：文档早期版本写过的 `timer` **不是**合法类型名，定时请用 `alarmClock`。
+
+### 九.8 规则 cfg 结构
 
 ```json
 {
@@ -505,6 +612,9 @@ async for raw in ws:
   }
 }
 ```
+
+`cfg.id` 必须与 `setGraph` 的 `id` 一致；`enable` 必须是布尔值。
+新建规则默认 `enable: false`，确认无误后再 `changeGraphConfig` 启用。
 
 ---
 

@@ -23,6 +23,7 @@ bridge/                         # 独立 Docker / Addon 服务
     ├── service.py              # 连接 / 轮询 / 刷新业务逻辑
     ├── api/                    # REST 路由（status/rules/variables/logs/events）
     ├── protocol/               # 网关协议实现（ECJPAKE + AES-GCM + JSON-RPC）
+    ├── schema.py               # 规则节点 schema 归一化 + 写入前校验
     ├── mcp_server.py           # MCP 服务（stdio / streamable-http）
     └── static/                 # Web 配置界面
         ├── index.html
@@ -128,7 +129,7 @@ scp -P 22222 -r bridge root@192.168.1.10:/mnt/data/supervisor/apps/local/
 ```bash
 ssh -p 22222 root@192.168.1.10
 cd /mnt/data/supervisor/apps/local/bridge
-docker build -t mijia-geek-bridge:2.2.0 .
+docker build -t mijia-geek-bridge:2.3.0 .
 ```
 
 ### 3. 启动容器
@@ -138,7 +139,7 @@ docker run -d --name mijia-geek-bridge \
   --restart unless-stopped \
   --label io.hass.type=app \
   --label io.hass.name=MijiaGeekBridge \
-  --label io.hass.version=2.2.0 \
+  --label io.hass.version=2.3.0 \
   --label io.hass.arch=amd64 \
   -p 8099:8099 \
   -e GATEWAY_URL=http://192.168.1.100 \
@@ -147,7 +148,7 @@ docker run -d --name mijia-geek-bridge \
   -e API_TOKEN=change-me-to-a-long-random-string \
   -e GATEWAY_WEB_URL=http://192.168.1.100:8086/ \
   -v /mnt/data/mijia_geek_bridge:/data \
-  mijia-geek-bridge:2.2.0
+  mijia-geek-bridge:2.3.0
 ```
 
 > ⚠️ **必须带 `io.hass.*` 标签**，否则 HAOS 会报「系统不受支持 - 不支持的软件」
@@ -334,6 +335,18 @@ ECJPAKE_ROUND_TWO = 33
 | `getLog` | 字符串 | 原样字符串，空串表示无更多日志 |
 
 > `getGraph` 返回 `{"nodes": [...]}`；保存规则时需由调用方补充 `cfg`（HA 的 `save_rule` 会自动生成）。
+
+### 规则节点 schema（重要）
+
+网关对节点结构的要求与早期文档差异很大，共有 8 处必顶字段写法不同
+（连线必须是 `"目标.端口"` 字符串、节点 `cfg.version`、`inputs` 声明端口、
+`dtype` 用 `int/boolean/...`、`operator` 用 `=`/`>`/...、触发值用 `v1`、
+输出用 `value`、延时用 `timeout` 毫秒）。
+
+- 完整对照表与可用示例见 [`PROTOCOL.md` 第九章](./PROTOCOL.md)。
+- Bridge 在写入前会调用 `bridge/app/schema.py` 自动归一化并校验，
+  不通过则返回 `400` + 具体原因，不会把非法结构发给网关。
+- 自测：`python -m pytest tests/test_schema.py`。
 
 ### 推送事件
 

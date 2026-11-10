@@ -14,6 +14,7 @@ Cursor、Cline 等 MCP 客户端使用。
 from __future__ import annotations
 
 import argparse
+import copy
 import hmac
 import logging
 import os
@@ -23,6 +24,8 @@ from typing import Any
 import httpx
 import uvicorn
 from mcp.server.mcpserver import MCPServer
+
+from schema import normalize_graph, normalize_dtype, normalize_operator
 
 _LOGGER = logging.getLogger("mijia_mcp")
 
@@ -125,10 +128,18 @@ def _parse_target(value: Any) -> tuple[str, str] | None:
 
 
 def lint_nodes(nodes: Any) -> list[str]:
-    """MCP 写入前的基础图结构校验。"""
+    """MCP 写入前的基础图结构校验（与网关 schema 对齐）。"""
     errors: list[str] = []
     if not isinstance(nodes, list) or not nodes:
         return ["nodes 必须是非空数组"]
+
+    # 调用同一套 schema 校验器，保证 MCP 与 REST 两侧提示一致
+    try:
+        from schema import validate_graph as _validate_graph
+    except ImportError:  # pragma: no cover - 仅独立运行且缺少模块时
+        _validate_graph = None
+    if _validate_graph is not None:
+        errors.extend(_validate_graph({"nodes": nodes, "cfg": {}}))
     by_id: dict[str, dict] = {}
     incoming: set[str] = set()
     for index, node in enumerate(nodes):
@@ -296,6 +307,10 @@ def build_server(client: BridgeClient, *, allow_write: bool,
                             name: str = "", enable: bool | None = None,
                             force: bool = False) -> dict:
             """保存规则节点图；新规则默认停用，更新时保留原元数据。"""
+            # 先归一化为网关真实结构（连线字符串、cfg.version、inputs 端口、
+            # dtype/operator 写法），再用同一套校验器复查，避免两套规则不一致。
+            graph, normalized = normalize_graph({"nodes": copy.deepcopy(nodes)})
+            nodes = graph["nodes"]
             errors = lint_nodes(nodes)
             if errors and not force:
                 raise BridgeError("规则校验失败: " + "; ".join(errors[:8]))
@@ -305,8 +320,11 @@ def build_server(client: BridgeClient, *, allow_write: bool,
                              {"nodes": nodes, "cfg": built,
                               "name": built["userData"]["name"]})
             readback = await client.get(f"/api/rule/{rule_id}")
-            return {"ok": True, "rule_id": rule_id,
-                    "warnings": errors, "readback": readback}
+            result = {"ok": True, "rule_id": rule_id,
+                      "warnings": errors, "readback": readback}
+            if normalized:
+                result["normalized"] = normalized
+            return result
 
         @mcp.tool()
         async def toggle_rule(rule_id: str, enable: bool) -> dict:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import math
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from api.models import SaveRuleReq
+from schema import normalize_graph, validate_graph
 from service import NotConnectedError
 
 _LOGGER = logging.getLogger("mijia_bridge.api")
@@ -38,6 +40,30 @@ def rule_user_data(rule: dict) -> dict:
     if not isinstance(base.get("transform"), dict):
         base["transform"] = {"x": 0, "y": 0, "scale": 1, "rotate": 0}
     return base
+
+
+def prepare_nodes(nodes: list,
+                  specs: dict[str, dict] | None = None) -> tuple[list, list[str]]:
+    """把「文档写法」的节点图归一化为网关可接受的结构，并做写入前校验。
+
+    网关对节点结构要求比文档严格得多（连线必须是 "目标.端口" 字符串、
+    节点 cfg 必须带 version、inputs 必须声明端口、dtype/operator 用内部写法）。
+    这里先归一化再校验，避免把必然失败的请求发给网关。
+
+    返回 ``(nodes, changes)``；校验不通过时抛 400 并附上可读原因。
+    """
+    if not nodes:
+        # 空图允许通过（例如先建规则壳、稍后在编辑器里补图）
+        return nodes, []
+    graph = {"nodes": copy.deepcopy(nodes)}
+    graph, changes = normalize_graph(graph)
+    errors = validate_graph(graph, specs)
+    if errors:
+        raise HTTPException(400, detail={
+            "message": "规则结构校验未通过",
+            "errors": errors,
+        })
+    return graph["nodes"], changes
 
 
 def build_save_cfg(rule_id: str, req: SaveRuleReq,

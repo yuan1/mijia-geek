@@ -1,5 +1,5 @@
 name: Mijia Geek Bridge
-version: "2.2.0"
+version: "2.3.0"
 slug: mijia_geek_bridge
 description: 米家中枢网关极客版桥接 —— 长连接网关，提供 REST API 和 Web 配置界面
 url: https://github.com/yuan1/mijia-geek

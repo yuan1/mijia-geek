@@ -518,15 +518,28 @@ Bridge 地址：${BRIDGE_BASE || 'http://<bridge>'}
 - DELETE /api/rule/{id}
 - POST /api/variables / PUT /api/variable/{id} / DELETE /api/variable/{id}
 
-规则结构：
-- 节点：{id,type,cfg:{urn,pos:{x,y,width,height}},props,inputs,outputs}
-- 连线：outputs = {"output":[["targetNode","trigger"]]}
+规则结构（已按网关实测校正，照抄以下写法）：
+- 节点：{id,type,cfg:{urn,version,pos:{x,y,width,height}},props,inputs,outputs}
+  · cfg.version 必须是整数（新节点写 0）
+  · id 只允许字母、数字与 |
+- 连线：outputs = {"output":["targetNode.输入端口"]}  ← 字符串，不是数组
+  · 目标节点的 inputs 必须声明该端口，例如 deviceOutput 用 {"trigger":null}
+  · delay/deviceGet/varGet 的输入端口是 input；logicAnd/Or 是 input1/input2
+- 触发（deviceInput）：props={did,siid,piid,dtype,operator,v1,preload}
+  · dtype 用 int/float/boolean/string（不是 uint8/bool）
+  · operator 用 = != > < >= <= between include（不是 eq/ne）
+  · 触发值用 v1（不是 value），另需 preload:false
+- 执行（deviceOutput）：props={did,siid,piid,value}（不是 params）或 {did,siid,aiid,ins}
+- 延时（delay）：props={timeout:毫秒}，inputs={"input":null}，cfg={unit:"s",value:120}
 - cfg：{id,enable,uiType:"graph",userData:{name,lastUpdateTime,transform:{x,y,scale,rotate}}}
-- 常见 type：deviceInput, deviceOutput, deviceGet, condition, delay, timer, logicAnd/Or/Not, signalOr, timeRange, varGet, varSetNumber/String, loop, counter, statusLast, eventSequence, modeSwitch, onLoad
+- 合法 type（25 种）：deviceInput, deviceInputSetVar, deviceOutput, deviceGet, deviceGetSetVar,
+  condition, delay, alarmClock, logicAnd/Or/Not, signalOr, timeRange, varGet, varSetNumber/String,
+  varChange, loop, counter, onlyNTimes, statusLast, eventSequence, modeSwitch, register, onLoad, nop
+  （timer 不是合法类型，定时请用 alarmClock）
 
 安全流程：
 1. 先只读导出并确认设备 siid/piid/aiid；
-2. 生成节点图并检查唯一 ID、端口、连线可达性；
+2. 生成节点图并检查唯一 ID、端口声明、连线可达性（Bridge 也会在写入前自动归一化+校验）；
 3. 新规则默认 enable=false；
 4. 保存到 PUT /api/rule/{id}；
 5. 重新 GET /api/rule/{id} 读回验证；

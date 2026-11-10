@@ -106,12 +106,7 @@ def test_mcp_save_rule_writes_cfg_and_reads_back():
     client = FakeClient()
     server = mcp_server.build_server(
         client, allow_write=True, allow_passcode=False)
-    nodes = [
-        {"id": "n1", "type": "deviceInput", "inputs": {},
-         "outputs": {"output": [["n2", "trigger"]]}},
-        {"id": "n2", "type": "deviceOutput", "inputs": {"trigger": None},
-         "outputs": {}},
-    ]
+    nodes = _led_nodes()
 
     asyncio.run(server.call_tool("save_rule", {
         "rule_id": "r1", "nodes": nodes, "name": "新规则",
@@ -125,34 +120,57 @@ def test_mcp_save_rule_writes_cfg_and_reads_back():
     assert body["cfg"]["userData"]["name"] == "新规则"
     assert body["cfg"]["uiType"] == "graph"
     assert client.calls[-1] == ("GET", "/api/rule/r1", None)
+    # 写入体必须是网关可接受的形状：连线为 "目标.端口" 字符串
+    assert body["nodes"][0]["outputs"]["output"] == ["n2.trigger"]
+
+
+def _led_nodes():
+    """一份符合网关真实 schema 的最小节点图（灯开/关）。"""
+    return [
+        {"id": "n1", "type": "deviceInput",
+         "cfg": {"urn": "urn:miot-spec-v2:device:light:0000A001:demo:1", "version": 0},
+         "props": {"did": "1", "siid": 2, "piid": 1, "dtype": "boolean",
+                   "operator": "=", "v1": True, "preload": False},
+         "inputs": {}, "outputs": {"output": ["n2.trigger"]}},
+        {"id": "n2", "type": "deviceOutput",
+         "cfg": {"urn": "urn:miot-spec-v2:device:light:0000A001:demo:1", "version": 0},
+         "props": {"did": "1", "siid": 2, "piid": 1, "value": True},
+         "inputs": {"trigger": None}, "outputs": {"output": []}},
+    ]
 
 
 def test_mcp_lint_nodes():
-    nodes = [
-        {"id": "n1", "type": "deviceInput", "inputs": {},
-         "outputs": {"output": [["n2", "trigger"]]}},
-        {"id": "n2", "type": "deviceOutput", "inputs": {"trigger": None},
-         "outputs": {}},
-    ]
-    assert mcp_server.lint_nodes(nodes) == []
+    assert mcp_server.lint_nodes(_led_nodes()) == []
 
     bad = [
-        {"id": "n1", "type": "deviceOutput", "inputs": {},
-         "outputs": {"output": [["missing", "trigger"]]}},
+        {"id": "n1", "type": "deviceOutput",
+         "cfg": {"urn": "", "version": 0}, "props": {},
+         "inputs": {"trigger": None},
+         "outputs": {"output": ["missing.trigger"]}},
     ]
     errors = mcp_server.lint_nodes(bad)
     assert any("不存在的节点" in item for item in errors)
     assert any("没有上游来源" in item for item in errors)
 
     duplicate = [
-        {"id": "n1", "type": "", "inputs": {}},
-        {"id": "n1", "type": "condition", "inputs": {}},
+        {"id": "n1", "type": "delay", "cfg": {"urn": "", "version": 0},
+         "props": {"timeout": 1000}, "inputs": {"input": None},
+         "outputs": {"output": []}},
+        {"id": "n1", "type": "condition", "cfg": {"urn": "", "version": 0},
+         "props": {}, "inputs": {"trigger": None, "condition": None},
+         "outputs": {"met": [], "unmet": []}},
     ]
     errors = mcp_server.lint_nodes(duplicate)
     assert any("节点 ID 重复" in item for item in errors)
-    assert any("缺少 type" in item for item in errors)
     assert any("缺少 trigger 来源" in item for item in errors)
     assert any("缺少 condition 来源" in item for item in errors)
+
+    # 未知节点类型必须被拦截
+    errors = mcp_server.lint_nodes([
+        {"id": "n1", "type": "whileLoop", "cfg": {"urn": "", "version": 0},
+         "props": {}, "inputs": {}, "outputs": {}},
+    ])
+    assert any("不支持的节点类型" in item for item in errors)
 
     assert mcp_server.lint_nodes([]) == ["nodes 必须是非空数组"]
 
@@ -198,12 +216,7 @@ def test_mcp_save_rule_preserves_existing_metadata():
     client = ExistingClient()
     server = mcp_server.build_server(
         client, allow_write=True, allow_passcode=False)
-    nodes = [
-        {"id": "n1", "type": "deviceInput", "inputs": {},
-         "outputs": {"output": [["n2", "trigger"]]}},
-        {"id": "n2", "type": "deviceOutput", "inputs": {"trigger": None},
-         "outputs": {}},
-    ]
+    nodes = _led_nodes()
     asyncio.run(server.call_tool("save_rule", {
         "rule_id": "r1", "nodes": nodes,
     }))

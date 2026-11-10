@@ -5,7 +5,7 @@ description: >-
   适用于需要读取设备/规则/变量、生成规则节点图、保存前校验、保存后读回验证的任务。
 metadata:
   author: mijia-geek-bridge
-  version: "2.2.0"
+  version: "2.3.0"
   license: MIT
 ---
 
@@ -74,54 +74,107 @@ MCP 只读工具：`bridge_status`、`list_devices`、`list_rules`、`get_rule`�
 
 ## 规则节点结构
 
+> ⚠️ **本节是唯一正确的结构参考。** 早期版本的示例（数组连线、`dtype:"bool"`、
+> `operator:"eq"`、`value` 作触发值、`params` 作输出、`seconds` 作延时）**全部
+> 与网关实际要求不符**，照抄会被 `-10002` 拒绝。下列结构已在真机写入成功。
+
+一份完整可用的最小规则：
+
 ```json
 {
-  "id": "node_1",
-  "type": "deviceInput",
+  "rule_id": "ai_demo_20261110",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "deviceInput",
+      "cfg": {
+        "urn": "urn:miot-spec-v2:device:occupancy-sensor:0000A0BF:linp-hb01:3:0000C824",
+        "version": 0,
+        "pos": {"x": 80, "y": 120, "width": 250, "height": 110}
+      },
+      "props": {
+        "did": "1000000001",
+        "siid": 2,
+        "piid": 1,
+        "dtype": "int",
+        "operator": "=",
+        "v1": 1,
+        "preload": false
+      },
+      "inputs": {},
+      "outputs": {"output": ["n2.trigger"]}
+    },
+    {
+      "id": "n2",
+      "type": "deviceOutput",
+      "cfg": {
+        "urn": "urn:miot-spec-v2:device:light:0000A001:seomsh-wy0a01:1:0000C802",
+        "version": 0,
+        "pos": {"x": 430, "y": 120, "width": 250, "height": 110}
+      },
+      "props": {"did": "1000000002", "siid": 2, "piid": 1, "value": true},
+      "inputs": {"trigger": null},
+      "outputs": {"output": []}
+    }
+  ],
   "cfg": {
-    "urn": "urn:miot-spec-v2:device:sensor:0000A077:linp-es2:1",
-    "pos": {"x": 100, "y": 100, "width": 200, "height": 100}
-  },
-  "props": {
-    "did": "blt.3.xxx",
-    "siid": 2,
-    "piid": 1,
-    "dtype": "bool",
-    "operator": "eq",
-    "value": true
-  },
-  "inputs": {},
-  "outputs": {"output": [["node_2", "trigger"]]}
-}
-```
-
-连线格式：
-
-```json
-{"outputs": {"output": [["目标节点ID", "目标输入端口"]]}}
-```
-
-规则 cfg：
-
-```json
-{
-  "id": "rule_123456",
-  "enable": false,
-  "uiType": "graph",
-  "userData": {
-    "name": "规则名称",
-    "lastUpdateTime": 0,
-    "transform": {"x": 0, "y": 0, "scale": 1, "rotate": 0}
+    "id": "ai_demo_20261110",
+    "enable": false,
+    "uiType": "graph",
+    "userData": {
+      "name": "示例规则",
+      "lastUpdateTime": 1710000000000,
+      "transform": {"x": 0, "y": 0, "scale": 1, "rotate": 0}
+    }
   }
 }
 ```
 
-常见节点类型：
+### 八条硬性要求
 
-- 触发：`deviceInput`、`deviceInputSetVar`、`alarmClock`、`onLoad`、`varChange`
-- 条件/逻辑：`condition`、`deviceGet`、`varGet`、`logicAnd`、`logicOr`、`logicNot`、`signalOr`、`timeRange`、`statusLast`、`counter`、`onlyNTimes`、`eventSequence`、`modeSwitch`
+| 字段 | ❌ 写了会被拒 | ✅ 正确写法 |
+|---|---|---|
+| 连线 | `[["n2", "trigger"]]` | `["n2.trigger"]`（`"目标.端口"` **字符串**） |
+| 节点 `cfg` | 只有 `urn`/`pos` | 必须含 `cfg.version: 0` |
+| `inputs` | `{}` | 必须声明：`deviceOutput`→`{"trigger":null}`，`delay`→`{"input":null}` |
+| `dtype` | `uint8` / `bool` / `float32` | `int` / `float` / `boolean` / `string` |
+| `operator` | `eq` / `ne` / `gt` | `=` `!=` `>` `<` `>=` `<=` `between` `include` |
+| 触发值 | `value: 1` | `v1: 1`（另需 `preload: false`） |
+| 输出值 | `params: [true]` | `value: true` |
+| 延时 | `{"seconds": 120}` | `{"timeout": 120000}`（**毫秒**）+ `cfg.unit/value` |
+
+### 端口对照（连线右侧必须匹配目标 `inputs` 的键）
+
+| 节点类型 | 输入端口 |
+|---|---|
+| `deviceInput` / `deviceInputSetVar` / `onLoad` / `alarmClock` | 无 |
+| `deviceOutput` | `trigger` |
+| `delay` / `deviceGet` / `deviceGetSetVar` / `varGet` / `logicNot` / `counter` | `input` |
+| `condition` | `trigger` + `condition` |
+| `logicAnd` / `logicOr` / `eventSequence` | `input1` + `input2` |
+| `statusLast` | `trigger` |
+
+> 最易错：**`delay` 的输入端口是 `input` 而不是 `trigger`。**
+
+### 节点 ID 限制
+
+只允许字母、数字与 `|`：`n1` ✅、`node|1` ✅、`node_1` ❌、`node-1` ❌。
+
+### operator 与 dtype 的合法组合（网关强校验）
+
+- `int`：`>=` `<=` `=` `!=` `>` `<` `between` `include`，`v1` 必须整数
+- `float`：仅 `>` `<` `between`，`v1` 必须数字
+- `boolean` / `string`：仅 `=`
+
+### 节点类型清单（25 种，`timer` 不是合法类型）
+
+- 触发：`deviceInput`、`deviceInputSetVar`、`alarmClock`、`onLoad`、`varChange`、`signalOr`
+- 条件/逻辑：`condition`、`deviceGet`、`varGet`、`logicAnd`、`logicOr`、`logicNot`、`timeRange`、`statusLast`、`counter`、`onlyNTimes`、`eventSequence`、`modeSwitch`、`register`
 - 动作：`deviceOutput`、`deviceGetSetVar`、`varSetNumber`、`varSetString`、`delay`、`loop`
 - 注释：`nop`
+
+> Bridge 会在写入前用 `bridge/app/schema.py` 自动归一化上述差异并校验，
+> 失败时返回 `400` 与具体原因。**但不要依赖它兜底**——按上表直接写对。
 
 ## 安全流程（必须遵守）
 

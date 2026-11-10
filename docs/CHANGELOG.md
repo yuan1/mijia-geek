@@ -202,6 +202,73 @@ docker restart app_local_mijia_geek_bridge
 
 ---
 
+## 2.3.0 规则 schema 校正 + 写入前归一化（2026-11-10）
+
+> 一句话：**旧文档里的规则示例写不进网关。** 本次按真机把结构改对，
+> 并把「自动修正 + 写入前校验」内置到 Bridge 与 MCP。
+
+### 🕳️ 坑 7：规则节点 schema 与文档不符（阻塞性）⭐⭐
+
+**现象**：用 `PUT /api/rule/{id}` 提交按文档写的节点图，网关返回：
+
+```
+-10002: Invalid node parameter:n1,Invalid connection: output->n2,trigger
+```
+
+哪怕把 `did/siid/piid` 反复核对了也一样失败。
+
+**定位方式**：官方极客版编辑器就跑在网关本机（`http://<网关>/`）。
+把它前端 JS 拉下来，找到它提交前的自校验函数
+`Dr.checkWebRule` → `Pr[type].checkWebNode`，即是网关的真实 schema。
+（校验器在 `gateway.*.js`，节点模板表在 `ai-config-v5.*.js`。）
+
+**8 处差异**（全部实测确认）：
+
+| # | 字段 | 文档写法 | 网关要求 |
+|---|---|---|---|
+| 1 | 连线 | `[["n2","trigger"]]` | `["n2.trigger"]`（**字符串**） |
+| 2 | 节点 `cfg` | `{urn,pos}` | 必须含 `version`（整数，新节点 0） |
+| 3 | `inputs` | `{}` | 必须声明端口（否则报 `Not property nor event` 类错误） |
+| 4 | `dtype` | `uint8`/`bool` | `int`/`float`/`boolean`/`string` |
+| 5 | `operator` | `eq`/`ne` | `=`/`!=`/`>`/`<`/`>=`/`<=`/`between`/`include` |
+| 6 | 触发值 | `value` | `v1`（+`preload`） |
+| 7 | 输出值 | `params:[true]` | `value: true` |
+| 8 | 延时 | `{seconds:120}` | `props.timeout:120000`（毫秒）+ `cfg.unit/value` |
+
+另外还有两个容易忽略的点：
+
+- **`delay` 的输入端口是 `input`，不是 `trigger`**；`logicAnd/Or` 是 `input1/input2`；
+  `condition` 是 `trigger`+`condition`。
+- **节点 `id` 只允许字母、数字与 `|`**，`node_1`、`node-1` 都会被拒。
+
+**解决**：新增 `bridge/app/schema.py`：
+
+- `normalize_graph()`：把上表「文档写法」自动改成网关写法，**幂等**，
+  并返回改动清单（会写进日志，便于排查「我明明写的 A 怎么变成 B」）。
+- `validate_graph()`：按网关 schema 逐项校验（含 `dtype`/`operator` 组合、
+  `between` 需 `v2`、端口声明、可达性、执行节点上游来源、ID 字符集），
+  给出可直接读的错误信息。
+
+接入点：
+
+- `PUT /api/rule/{id}`：先归一化再校验，不通过直接 `400` + 具体原因，
+  不再把必然失败的请求发给网关。
+- MCP `save_rule`：走同一套归一化 + 校验，返回里新增 `normalized` 字段。
+- `lint_nodes()`：改为复用 `validate_graph`，MCP 与 REST 提示一致。
+
+**验证**：把最初失败的「文档写法」图喂给 `normalize_graph()`，修正 25 处后
+与真机写入成功后读回的规则**逐字段完全一致**；`tests/test_schema.py`
+新增 37 条用例（含上述 8 个坑的回归），全仓 88 项测试通过。
+
+### 文档同步
+
+- `docs/PROTOCOL.md` 第九章重写为「实测校正版」，含端口对照表与 ID 限制。
+- `skills/mijia-geek-bridge/SKILL.md` 的节点结构章节重写。
+- Bridge Web UI 的「复制 AI 提示词」同步修正（这份提示词正是最初写错的源头）。
+- 修正文档里的 `timer` → 正确类型是 `alarmClock`。
+
+---
+
 ## 2.2.0 MCP 服务（2026-11-10）
 
 - 新增 `bridge/app/mcp_server.py`：
