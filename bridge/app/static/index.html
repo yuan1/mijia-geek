@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>米家极客版桥接</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>🌉 米家极客版桥接</h1>
+  <div class="sub">长连接中枢网关 · HA 重启不受影响 · 只读预览 / 官方编辑器 / AI Skills</div>
+
+  <!-- 连接状态 -->
+  <div class="card">
+    <h2>连接状态</h2>
+    <div class="row" style="margin-bottom:12px">
+      <span id="connBadge" class="badge wait"><span class="dot"></span>检查中</span>
+      <span id="gwAddr" style="color:#7a8a9a;font-size:12px"></span>
+    </div>
+    <div class="grid">
+      <div class="stat"><div class="v" id="sDev">-</div><div class="k">设备总数</div></div>
+      <div class="stat"><div class="v" id="sOnline">-</div><div class="k">在线设备</div></div>
+      <div class="stat"><div class="v" id="sRule">-</div><div class="k">自动化规则</div></div>
+      <div class="stat"><div class="v" id="sEnabled">-</div><div class="k">启用规则</div></div>
+    </div>
+    <div id="errMsg" class="msg"></div>
+  </div>
+
+  <!-- 登录码 -->
+  <div class="card">
+    <h2>登录码</h2>
+    <div class="hint" style="margin-bottom:10px">
+      米家 App → 中枢网关 → 右上角「···」→ 自动化极客版 → 6 位码
+      <br>⚠️ 一次性有效，成功或失败都会作废
+    </div>
+    <div class="row">
+      <input id="passcode" type="password" maxlength="6" inputmode="numeric"
+             placeholder="6 位数字登录码">
+      <button id="btnConnect">连接</button>
+    </div>
+    <div id="connMsg" class="msg"></div>
+  </div>
+
+  <!-- 数据浏览 / 预览 / 官方编辑器 / AI -->
+  <div class="card">
+    <div class="tabs">
+      <div class="tab active" data-pane="devices">设备</div>
+      <div class="tab" data-pane="rules">规则与只读预览</div>
+      <div class="tab" data-pane="logs">日志</div>
+      <div class="tab" data-pane="editor">官方编辑器</div>
+      <div class="tab" data-pane="ai">AI Skills</div>
+    </div>
+
+    <div class="pane active" id="pane-devices">
+      <div class="row" style="margin-bottom:8px">
+        <input id="devFilter" placeholder="筛选设备名 / 房间 / 型号…">
+        <button class="ghost" id="btnRefresh">刷新</button>
+      </div>
+      <div class="list" id="devList"><div class="hint">未连接或暂无数据</div></div>
+    </div>
+
+    <div class="pane" id="pane-rules">
+      <div class="hint" style="margin-bottom:8px">
+        点击「预览」只读查看规则节点、连线与基础校验；开关用于启停规则。
+      </div>
+      <div class="list" id="ruleList"><div class="hint">暂无规则</div></div>
+
+      <div class="preview" id="rulePreview" hidden>
+        <div class="previewHead">
+          <div>
+            <div class="title" id="rpName">规则预览</div>
+            <div class="meta" id="rpMeta"></div>
+          </div>
+          <div class="row">
+            <button class="ghost small" id="rpCopy">复制 JSON</button>
+            <button class="ghost small" id="rpClose">关闭</button>
+          </div>
+        </div>
+        <div class="issues" id="rpIssues"></div>
+        <div class="graphWrap" id="rpGraph"></div>
+        <details>
+          <summary>节点 JSON（只读）</summary>
+          <pre id="rpJson"></pre>
+        </details>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-logs">
+      <div class="row" style="margin-bottom:8px">
+        <button class="ghost" id="btnLog0">第 0 页</button>
+        <button class="ghost" id="btnLog1">第 1 页</button>
+        <button class="ghost" id="btnLog2">第 2 页</button>
+      </div>
+      <pre id="logBox">点击上方按钮读取日志</pre>
+    </div>
+
+    <div class="pane" id="pane-editor">
+      <div class="hint" style="margin-bottom:10px">
+        直接嵌入网关自带的「自动化极客版」网页编辑器。它仍是唯一的官方编辑入口，
+        本桥接只负责只读预览和 REST/SSE。
+      </div>
+      <div class="row">
+        <input id="editorUrl" readonly placeholder="未配置官方编辑器地址">
+        <button class="ghost" id="btnEditorLoad">加载</button>
+        <button class="ghost" id="btnEditorOpen">新窗口打开</button>
+      </div>
+      <div class="hint" id="editorNote" style="margin-top:8px"></div>
+      <div class="iframeWrap">
+        <iframe id="editorFrame" title="米家极客版官方编辑器"
+                referrerpolicy="no-referrer"></iframe>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-ai">
+      <div class="hint" style="margin-bottom:10px">
+        AI 只读审计、规则编译和新建建议可复用以下 MIT 项目；Bridge 暴露 REST/SSE，
+        官方编辑器负责人工确认与最终保存。
+      </div>
+      <div class="aiLinks">
+        <a href="docs" target="_blank" rel="noopener">Bridge OpenAPI / Swagger（docs）</a>
+        <a href="openapi.json" target="_blank" rel="noopener">OpenAPI JSON</a>
+        <a href="https://github.com/allocnode/oh-my-sage" target="_blank" rel="noopener">oh-my-sage（MIT）— AI Skill / 协议 / 规则文本</a>
+        <a href="https://github.com/609293964/mijia-geek-assistant-fnnas" target="_blank" rel="noopener">mijia-geek-assistant-fnnas（MIT）— RulePlan / compiler / graph-lint / GraphPanel</a>
+        <a href="https://github.com/lixinyu02/mijia-geek-automation-skills" target="_blank" rel="noopener">mijia-geek-automation-skills（MIT）— 规则导出/解析/安全流程</a>
+        <a href="https://github.com/xmx-emm/mijiaflow" target="_blank" rel="noopener">mijiaflow（MIT）— 变更计划 / 备份 / 回滚</a>
+      </div>
+      <div class="node-card" style="margin-top:12px">
+        <div class="t">MCP 服务</div>
+        <div class="d">
+          stdio：<code>python3 /app/mcp_server.py --url http://127.0.0.1:8099</code><br>
+          HTTP：<code>--transport streamable-http --host 127.0.0.1 --port 8098</code>，客户端地址 <code>/mcp</code><br>
+          只读工具默认启用；写入需 <code>MCP_ALLOW_WRITE=1</code>，登录码工具默认关闭。
+        </div>
+      </div>
+      <div class="hint" style="margin:14px 0 6px">可复制的 AI 规则生成提示词：</div>
+      <pre id="aiPrompt"></pre>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost small" id="btnCopyPrompt">复制提示词</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="static/app.js"></script>
+</body>
+</html>

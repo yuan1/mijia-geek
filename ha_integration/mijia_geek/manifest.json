@@ -1,0 +1,11 @@
+{
+  "domain": "mijia_geek",
+  "name": "米家极客版",
+  "documentation": "https://github.com/yuan1/mijia-geek",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": [],
+  "iot_class": "local_polling",
+  "version": "2.2.0",
+  "config_flow": true
+}

@@ -1,0 +1,56 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "连接米家极客版 Bridge",
+        "description": "填写 mijia-geek-bridge 的地址与 API Token。登录码由 Bridge 管理，HA 重启不需要重新输入。",
+        "data": {
+          "bridge_url": "Bridge 地址（http:// 或 https://）",
+          "api_token": "API Token（未启用可留空）"
+        }
+      },
+      "reauth_confirm": {
+        "title": "更新 Bridge API Token",
+        "description": "Bridge（{url}）拒绝了当前 Token，请输入新的 Token。",
+        "data": {
+          "api_token": "API Token"
+        }
+      },
+      "reconfigure": {
+        "title": "重新配置 Bridge",
+        "description": "修改 Bridge 地址或 API Token。",
+        "data": {
+          "bridge_url": "Bridge 地址（http:// 或 https://）",
+          "api_token": "API Token（未启用可留空）"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Bridge 地址必须以 http:// 或 https:// 开头",
+      "invalid_auth": "API Token 无效",
+      "cannot_connect": "无法连接 Bridge，请检查地址与网络"
+    },
+    "abort": {
+      "already_configured": "该 Bridge 已配置",
+      "reauth_successful": "Token 更新成功",
+      "reconfigure_successful": "重新配置成功",
+      "unknown_entry": "找不到对应的配置条目"
+    }
+  },
+  "issues": {
+    "migrate_to_bridge": {
+      "title": "米家极客版需要重新配置",
+      "description": "旧版直连配置已迁移为 Bridge 客户端。请在集成条目上点击“重新配置”，填写 Bridge 地址与 API Token。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "米家极客版选项",
+        "data": {
+          "scan_interval": "轮询间隔（秒，15-3600）"
+        }
+      }
+    }
+  }
+}

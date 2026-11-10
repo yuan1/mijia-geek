@@ -1,0 +1,212 @@
+# 米家极客版服务定义
+refresh:
+  name: 刷新数据
+  description: 立即让 Bridge 从网关拉取最新设备与规则数据
+  fields: {}
+
+toggle_rule:
+  name: 启停规则
+  description: 启用或停用极客版自动化规则
+  fields:
+    rule_id:
+      name: 规则 ID
+      description: 极客版规则的唯一标识
+      required: true
+      example: "rule_123456"
+      selector:
+        text:
+    enable:
+      name: 启用
+      description: true 启用，false 停用
+      required: true
+      example: true
+      selector:
+        boolean:
+
+set_rule_enabled:
+  name: 设置规则启用状态
+  description: 同 toggle_rule，语义化别名
+  fields:
+    rule_id:
+      name: 规则 ID
+      required: true
+      selector:
+        text:
+    enable:
+      name: 启用
+      required: true
+      selector:
+        boolean:
+
+get_rule_detail:
+  name: 查询规则详情
+  description: 获取指定规则的节点与连线配置，结果通过事件 mijia_geek_rule_detail 返回
+  fields:
+    rule_id:
+      name: 规则 ID
+      required: true
+      selector:
+        text:
+
+get_log:
+  name: 读取日志（单页）
+  description: 读取网关执行日志的指定页
+  fields:
+    page:
+      name: 页码
+      description: 从 0 开始
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: box
+
+get_log_all:
+  name: 读取日志（多页）
+  description: 连续读取最近 N 页日志并合并
+  fields:
+    pages:
+      name: 页数
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+
+delete_rule:
+  name: 删除规则
+  description: 永久删除指定自动化规则（谨慎使用）
+  fields:
+    rule_id:
+      name: 规则 ID
+      required: true
+      selector:
+        text:
+
+set_variable:
+  name: 设置变量
+  description: 写入极客版全局变量
+  fields:
+    scope:
+      name: 作用域
+      default: global
+      selector:
+        text:
+    var_id:
+      name: 变量 ID
+      required: true
+      selector:
+        text:
+    value:
+      name: 变量值
+      required: true
+      selector:
+        text:
+
+get_variable:
+  name: 读取变量值
+  description: 读取极客版变量的当前值，结果通过事件 mijia_geek_var_value 返回
+  fields:
+    scope:
+      name: 作用域
+      default: global
+      selector:
+        text:
+    var_id:
+      name: 变量 ID
+      required: true
+      selector:
+        text:
+
+get_variable_scopes:
+  name: 列出变量作用域
+  description: 获取所有可用的变量作用域（global / 各规则 ID）
+  fields: {}
+
+create_variable:
+  name: 创建变量
+  description: 在极客版中新建一个变量
+  fields:
+    scope:
+      name: 作用域
+      default: global
+      selector:
+        text:
+    var_id:
+      name: 变量 ID
+      required: true
+      selector:
+        text:
+    var_type:
+      name: 类型
+      default: string
+      selector:
+        select:
+          options:
+            - string
+            - number
+    value:
+      name: 初始值
+      selector:
+        text:
+    name:
+      name: 显示名称
+      selector:
+        text:
+
+delete_variable:
+  name: 删除变量
+  description: 删除极客版变量（谨慎：引用该变量的规则会失效）
+  fields:
+    scope:
+      name: 作用域
+      default: global
+      selector:
+        text:
+    var_id:
+      name: 变量 ID
+      required: true
+      selector:
+        text:
+
+save_rule:
+  name: 保存规则
+  description: >-
+    创建或覆盖极客版自动化规则。
+    graph 参数为 JSON 字符串或对象，需包含 nodes 数组，
+    节点类型参考 deviceInput / deviceOutput / condition 等。
+  fields:
+    rule_id:
+      name: 规则 ID
+      description: 新建时自定义唯一 ID，覆盖时填已有 ID
+      required: true
+      selector:
+        text:
+    graph:
+      name: 规则 JSON
+      description: '{"nodes": [...], "cfg": {...}}'
+      required: true
+      selector:
+        text:
+          multiline: true
+    name:
+      name: 规则名称
+      selector:
+        text:
+
+set_passcode:
+  name: 设置登录码
+  description: >-
+    把 6 位登录码发送给 mijia-geek-bridge，由 Bridge 建立网关连接。
+    登录码从米家 App → 中枢网关 → ··· → 自动化极客版 获取，一次性有效。
+    登录码不会写入 HA 配置条目或实体状态，也不会出现在日志中。
+  fields:
+    passcode:
+      name: 6 位登录码
+      description: 数字，6 位
+      required: true
+      example: "123456"
+      selector:
+        text:

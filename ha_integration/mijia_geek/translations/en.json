@@ -1,0 +1,56 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Mijia Geek Bridge",
+        "description": "Enter the mijia-geek-bridge URL and API token. The Bridge owns the gateway session, so Home Assistant restarts do not require a new passcode.",
+        "data": {
+          "bridge_url": "Bridge URL (http:// or https://)",
+          "api_token": "API token (leave empty if disabled)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update Bridge API token",
+        "description": "Bridge ({url}) rejected the current token. Enter a new token.",
+        "data": {
+          "api_token": "API token"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Bridge",
+        "description": "Change the Bridge URL or API token.",
+        "data": {
+          "bridge_url": "Bridge URL (http:// or https://)",
+          "api_token": "API token (leave empty if disabled)"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "The Bridge URL must start with http:// or https://",
+      "invalid_auth": "Invalid API token",
+      "cannot_connect": "Unable to connect to the Bridge"
+    },
+    "abort": {
+      "already_configured": "This Bridge is already configured",
+      "reauth_successful": "Token updated",
+      "reconfigure_successful": "Reconfiguration successful",
+      "unknown_entry": "Configuration entry not found"
+    }
+  },
+  "issues": {
+    "migrate_to_bridge": {
+      "title": "Mijia Geek integration needs reconfiguration",
+      "description": "The legacy direct-connection entry was migrated to the Bridge client. Open the integration entry and choose Reconfigure to enter the Bridge URL and API token."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Mijia Geek options",
+        "data": {
+          "scan_interval": "Poll interval (seconds, 15-3600)"
+        }
+      }
+    }
+  }
+}
